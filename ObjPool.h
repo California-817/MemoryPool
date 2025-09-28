@@ -64,9 +64,8 @@ namespace Xten
         if (_freeList)
         {
             // 拿到下一个内存块地址
-            void *next = *((void **)_freeList);
             obj = (T *)_freeList;
-            _freeList = next;
+            _freeList = *((void **)_freeList);
         } // 无回收空间
         else
         {
@@ -95,8 +94,7 @@ namespace Xten
     {
         ptr->~T(); //1.显式调用析构函数
         //2.归还空间到空闲链表---头插
-        void* next=_freeList;
-        *((void**)ptr)=next;
+        *((void**)ptr)=_freeList;
         _freeList=ptr;
     }
 } // namespace Xten
