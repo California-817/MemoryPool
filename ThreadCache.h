@@ -18,13 +18,17 @@ namespace Xten
         ~FreeList();
         // 头插内存块
         void Push(void *obj);
+        // 头插一定范围内存块
+        void PushRange(void* begin,void* end);
         // 头删内存块
         void *Pop();
         // 是否为空
         bool IsEmpty();
-
+        // 返回向cc获取内存块数量的接口
+        size_t& GetMaxSize()  {return _maxSize;}
     private:
-        void *_freeList;
+        void *_freeList; //链表连起来的空间不一定是连续的
+        size_t _maxSize;
     };
     // 线程独占的threadCache结构
     class ThreadCache
@@ -42,7 +46,7 @@ namespace Xten
 
     private:
         ThreadCache() = default;
-        // 向centralCache获取内存空间
+        // 向centralCache获取内存空间  index是hash下标,alignSize是对齐后大小
         void *fetchFromCentralCache(size_t index,size_t alignSize);
 
     private:

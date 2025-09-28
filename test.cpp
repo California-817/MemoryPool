@@ -1,6 +1,7 @@
 #include "ObjPool.h"
 #include <iostream>
 #include <vector>
+#include"xmalloc.h"
 class obj
 {
 public:
@@ -32,6 +33,7 @@ void testObjPool()
 }
 int main()
 {
-    testObjPool();
+    // testObjPool();
+    Xten::xmalloc(100);
     return 0;
 }
