@@ -6,8 +6,6 @@ namespace Xten
 {
 // 空闲链表个数
 #define FREE_LISTS_NUM 208
-// 单次最大申请空间大小
-#define MAX_ALLOC_SIZE 256 * 1024
     // 空闲链表结构----不存在真正的链表节点结构，空间就是节点，就能存储下一个节点地址
     class FreeList
     {
@@ -19,15 +17,16 @@ namespace Xten
         // 头插内存块
         void Push(void *obj);
         // 头插一定范围内存块
-        void PushRange(void* begin,void* end);
+        void PushRange(void *begin, void *end);
         // 头删内存块
         void *Pop();
         // 是否为空
         bool IsEmpty();
         // 返回向cc获取内存块数量的接口
-        size_t& GetMaxSize()  {return _maxSize;}
+        size_t &GetMaxSize() { return _maxSize; }
+
     private:
-        void *_freeList; //链表连起来的空间不一定是连续的
+        void *_freeList; // 链表连起来的空间不一定是连续的
         size_t _maxSize;
     };
     // 线程独占的threadCache结构
@@ -37,6 +36,7 @@ namespace Xten
 
     public:
         typedef std::shared_ptr<ThreadCache> ptr;
+        // 获取线程局部存储的ThreadCache对象
         static ThreadCache *GetThreadCache();
         ~ThreadCache();
         // 获取空间--任意Size
@@ -47,7 +47,7 @@ namespace Xten
     private:
         ThreadCache() = default;
         // 向centralCache获取内存空间  index是hash下标,alignSize是对齐后大小
-        void *fetchFromCentralCache(size_t index,size_t alignSize);
+        void *fetchFromCentralCache(size_t index, size_t alignSize);
 
     private:
         // [1-128] 8B对齐        -------  [0,15] ------16

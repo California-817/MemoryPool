@@ -14,7 +14,7 @@ namespace Xten
         Span *prev = nullptr;
         Span *next = nullptr;
 
-        PageID pageId = 0; // 页编号
+        PageID pageId = 0; // 页编号----类似于虚拟地址中的前20位形成的一二级页表
 
         size_t pageCount = 0; // 所拥有页数
         size_t usedCount = 0; // 给ThreadCache使用空间块数
@@ -32,6 +32,11 @@ namespace Xten
             // 创建一个哨兵头结点即可
             _head->next = _head;
             _head->prev = _head;
+        }
+        //头插一个Span节点
+        void PushFront(Span* node)
+        {
+            Insert(_head,node);
         }
         // 在指定pos位置之后插入一个span节点
         void Insert(Span *pos, Span *node)
@@ -52,6 +57,28 @@ namespace Xten
             Span *next = node->next;
             prev->next = next;
             next->prev = prev;
+        }
+        //链表是否为空
+        bool IsEmpty()
+        {
+            return _head->next==_head;
+        }
+        //获取非空的第一个Span----会将Span从链表中删除
+        Span* GetFrontSpan()
+        {
+            Span* front=Begin();
+            Erase(front);
+            return front;
+        }
+        //返回头节点
+        Span* Begin()
+        {
+            return _head->next;
+        }
+        //返回最后一个节点的下一个节点---哨兵节点
+        Span* End()
+        {
+            return _head;
         }
         // 获取锁
         std::mutex &GetMutex() { return _mtx; }

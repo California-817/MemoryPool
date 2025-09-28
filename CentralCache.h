@@ -22,6 +22,7 @@ namespace Xten
         Span* GetOneSpan(SpanList& list,size_t size);
     private:
         CentralCache() = default;
+        ~CentralCache() = default;
         // [1-128] 8B对齐        -------  [0,15] ------16
         // [128+1-1024] 16B对齐  ----------- [16,71] ------56
         // [1024+1-8*1024] 128B对齐 ---------[72,127] ------56
