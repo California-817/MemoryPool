@@ -16,18 +16,23 @@ namespace Xten
         ~FreeList();
         // 头插内存块
         void Push(void *obj);
-        // 头插一定范围内存块
-        void PushRange(void *begin, void *end);
+        // 头插一定范围内存块,n表示内存块个数
+        void PushRange(void *begin, void *end, size_t n);
+        // 头删一定范围内存块,n表示删除内存块个数
+        void PopRange(void*& begin,void*& end,size_t n);
         // 头删内存块
         void *Pop();
         // 是否为空
         bool IsEmpty();
+        // 获取当前内存块个数
+        size_t GetCurSize() const { return _curSize; }
         // 返回向cc获取内存块数量的接口
         size_t &GetMaxSize() { return _maxSize; }
 
     private:
         void *_freeList; // 链表连起来的空间不一定是连续的
-        size_t _maxSize;
+        size_t _maxSize; // 单次向cc申请内存块的个数
+        size_t _curSize; // 当前的FreeList内存块个数
     };
     // 线程独占的threadCache结构
     class ThreadCache
@@ -41,7 +46,7 @@ namespace Xten
         ~ThreadCache();
         // 获取空间--任意Size
         void *Allocate(size_t size);
-        // 释放空间
+        // 释放空间--任意Size(作用是进行查找hash中FreeList的下标)
         void Deallocate(void *ptr, size_t size);
 
     private:

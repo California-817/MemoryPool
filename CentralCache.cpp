@@ -28,6 +28,36 @@ namespace Xten
         _spanLists[index].GetMutex().unlock();
         return realBatchNum;
     }
+    // 从tc中回收一定范围的空间----这些内存块一定在同一个SpanList中,但是不一定会在同一个Span中
+    void CentralCache::RecycleRangeMemoryFromTC(void *begin,size_t size)
+    {
+        size_t index=MemoryPoolUtil::FindIndex(size);
+        //多tc回收并发访问这个接口 需要加锁
+        _spanLists[index].GetMutex().lock();
+        //通过块地址确定内存块所在页的PageId----从而确定所属Span
+        while(begin)
+        {
+            void* next=*((void**)begin);
+            Span* pspan=PageCache::GetInstance()->MemoryPtr2Span(begin); //一定在index下标处的Spanlist中
+            //插回Span中
+            *((void**)begin)=pspan->list;
+            pspan->list=begin;
+            //回收一个内存块,Span对应的usedCount--
+            pspan->usedCount--;
+            if(pspan->usedCount==0)
+            {
+                //从CC的Spanlist中删除
+                _spanLists[index].Erase(pspan);
+                pspan->list=nullptr;
+                pspan->next=nullptr;
+                pspan->prev=nullptr;
+                //说明这个Span所管理的所有页空间都是空闲的,可以交给PageCache合并成更大的页------减少外部碎片
+                PageCache::GetInstance()->RecycleFreeSpanFromCC(pspan);
+            }
+            begin=next;
+        }
+        _spanLists[index].GetMutex().unlock();
+    }
     // 获取一个管理空间不为空的Span
     Span *CentralCache::GetOneSpan(SpanList &list, size_t size)
     {
@@ -41,7 +71,7 @@ namespace Xten
             cur = cur->next;
         }
 
-        //将cc的某个SpanList的锁解掉----使得在向PageCache获取Span时,这个SpanList可以被其他线程访问
+        // 将cc的某个SpanList的锁解掉----使得在向PageCache获取Span时,这个SpanList可以被其他线程访问
         list.GetMutex().unlock();
         //======================================================================================
         //========== 下面这一段代码不涉及到对CentraCache中的某个SpanList操作的代码==================
@@ -49,22 +79,22 @@ namespace Xten
         // 没有找到可用的span [ 1.有Span无free空间 2.无Span ] ---去PageCache中获取
         Span *newSpan = PageCache::GetInstance()->NewSpan(MemoryPoolUtil::Size2Page(size));
         // 注意：这个newSpan还没有进行内存块大小划分
-        //1.进行内存划分
-        char* begin=(char*)(newSpan->pageId<<PAGE_SHIFT);
-        char* tail=(char*)(begin+(newSpan->pageCount<<PAGE_SHIFT));
-        newSpan->list=(void*)begin;
-        char* next=begin+size;
-        while (next<tail)
+        // 1.进行内存划分
+        char *begin = (char *)(newSpan->pageId << PAGE_SHIFT);
+        char *tail = (char *)(begin + (newSpan->pageCount << PAGE_SHIFT));
+        newSpan->list = (void *)begin;
+        char *next = begin + size;
+        while (next < tail)
         {
-            *((void**)begin)=next;
-            begin=next;
-            next=next+size;
+            *((void **)begin) = next;
+            begin = next;
+            next = next + size;
         }
-        *((void**)begin)=nullptr; //最后一个内存块的next=nullptr
+        *((void **)begin) = nullptr; // 最后一个内存块的next=nullptr
         //======================================================================================
-        list.GetMutex().lock(); //重新加锁
+        list.GetMutex().lock(); // 重新加锁
 
-        //2.将这个newSpan链接到这个centralCache对应hash桶的Spanlist上
+        // 2.将这个newSpan链接到这个centralCache对应hash桶的Spanlist上
         list.PushFront(newSpan);
         return newSpan;
     }

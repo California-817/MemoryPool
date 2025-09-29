@@ -18,8 +18,11 @@ namespace Xten
         //向threadCache分配一定范围的空间 
         //[begin---空间起始地址] [end---空间结束地址] [batchNum---申请块数] [size---申请单块空间大小(已经对齐)] [ret---实际分配块数]
         size_t fetchRangeMemory2TC(void*& begin,void*& end,size_t batchNum,size_t size);
+        //从tc中回收一定范围的空间----这些内存块一定在同一个SpanList中,但是不一定会在同一个Span中
+        void RecycleRangeMemoryFromTC(void* begin,size_t size);
         //获取一个管理空间不为空的Span
         Span* GetOneSpan(SpanList& list,size_t size);
+        //从tc的FreeList中回收内存到Spans中
     private:
         CentralCache() = default;
         ~CentralCache() = default;

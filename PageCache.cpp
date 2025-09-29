@@ -12,13 +12,31 @@ namespace Xten
         _mtx.unlock();
         return newspan;
     }
+    // 获取指定内存块所属的Span指针
+    Span *PageCache::MemoryPtr2Span(void *ptr)
+    {
+        PageID pgid = ((PageID)ptr >> PAGE_SHIFT);
+        auto iter = _PageId2Span.find(pgid);
+        if (iter == _PageId2Span.end())
+        {
+            assert(false);
+            return nullptr;
+        }
+        return iter->second;
+    }
     Span *PageCache::newSpanLockfree(size_t pageNum)
     {
         assert(pageNum > 0 && pageNum < PAGE_NUM);
         // 1.对应的SpanList中有Span
         if (!_spanLists[pageNum].IsEmpty())
         {
-            return _spanLists[pageNum].GetFrontSpan();
+            Span *ret = _spanLists[pageNum].GetFrontSpan();
+            // 建立PageId与Span指针的映射关系
+            for (PageID i = 0; i < ret->pageCount; i++)
+            {
+                _PageId2Span[ret->pageId + i] = ret;
+            }
+            return ret;
         }
         // 2.去页数更多的SpanList中查找Span并进行分裂
         for (int i = pageNum + 1; i < PAGE_NUM; i++)
@@ -34,6 +52,10 @@ namespace Xten
             mspan->pageCount = i - pageNum;
             // 将另一个放入i-pageNum页数链表中
             _spanLists[i - pageNum].PushFront(mspan);
+            for (PageID i = 0; i < nspan->pageCount; i++)
+            {
+                _PageId2Span[nspan->pageId + i] = nspan;
+            }
             return nspan;
         }
         // 3.调用系统调用接口进行获取Span----直接申请128页的空间并创建Span
@@ -44,6 +66,11 @@ namespace Xten
         bigSpan->pageCount = PAGE_NUM - 1;
         _spanLists[PAGE_NUM - 1].PushFront(bigSpan);
         return newSpanLockfree(pageNum); // 递归调用 此时一定能走到情况2
+    }
+    // 从CentralCache中回收空闲Span并合并成更大页空间的Span
+    void PageCache::RecycleFreeSpanFromCC(Span *span)
+    {
+        //todo
     }
     PageCache PageCache::_instance;
 } // namespace Xten

@@ -7,7 +7,7 @@ namespace Xten
     // 线程局部存储保证每个线程都有一个threadCache
     static thread_local ThreadCache *t_threadCache = nullptr;
     FreeList::FreeList()
-        : _freeList(nullptr)
+        : _freeList(nullptr), _curSize(0), _maxSize(1)
     {
     }
     FreeList::~FreeList()
@@ -19,13 +19,29 @@ namespace Xten
     {
         *((void **)obj) = _freeList;
         _freeList = obj;
+        _curSize++;
     }
     // 头插一定范围内存块
-    void FreeList::PushRange(void *begin, void *end)
+    void FreeList::PushRange(void *begin, void *end, size_t n)
     {
         assert(begin && end);
         *((void **)end) = _freeList;
         _freeList = begin;
+        _curSize += n;
+    }
+    // 头删一定范围内存块,n表示删除内存块个数
+    void FreeList::PopRange(void *&begin, void *&end, size_t n)
+    {
+        assert(n > 0 && _curSize > n);
+        begin=_freeList;
+        end=_freeList;
+        for(int i=0;i<n-1;i++)
+        {
+            end=(void*)(*((void**)end));
+        }
+        _freeList=(void*)(*(void**)end);
+        *((void**)end)=nullptr;
+        _curSize-=n;
     }
     // 头删内存块
     void *FreeList::Pop()
@@ -36,6 +52,7 @@ namespace Xten
             ret = _freeList;
             _freeList = *((void **)_freeList);
         }
+        _curSize--;
         return ret;
     }
     bool FreeList::IsEmpty()
@@ -69,8 +86,19 @@ namespace Xten
         assert(ptr && 0 < size && size <= MAX_ALLOC_SIZE);
         size_t index = MemoryPoolUtil::FindIndex(size);
         _freeLists[index].Push(ptr);
+
+        size_t maxSize = _freeLists[index].GetMaxSize();
         // 将空间还给tc后，其实还需要将tc中的空闲空间还给cc
-        // todo
+        // 1.判断当前的内存块数量是否大于MaxSize------大于则归还MaxSize个内存块给cc
+        if (_freeLists[index].GetCurSize() > maxSize)
+        {
+            // pop
+            void *begin = nullptr;
+            void *end = nullptr;
+            _freeLists[index].PopRange(begin, end, maxSize);
+            // 还给cc----归还的这些内存块一定在同一个SpanList中,但是不一定会在同一个Span中
+            CentralCache::GetInstance()->RecycleRangeMemoryFromTC(begin,size);
+        }
     }
     // 从CentralCache获取空间
     void *ThreadCache::fetchFromCentralCache(size_t index, size_t alignSize)
@@ -95,9 +123,9 @@ namespace Xten
         else
         {
             // 实际分配块数大于1块,需要头插剩余内存块
-            _freeLists[index].PushRange((void *)(*((void **)begin)), end);
+            _freeLists[index].PushRange((void *)(*((void **)begin)), end, realBatchNum - 1);
         }
-        *((void**)begin)=nullptr;//防止外部拿到这个地址进行非法内存访问
+        *((void **)begin) = nullptr; // 防止外部拿到这个地址进行非法内存访问
         return begin;
     }
     ThreadCache *ThreadCache::GetThreadCache()
