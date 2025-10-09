@@ -52,7 +52,11 @@ namespace Xten
                 pspan->next=nullptr;
                 pspan->prev=nullptr;
                 //说明这个Span所管理的所有页空间都是空闲的,可以交给PageCache合并成更大的页------减少外部碎片
+                //此时这个Span已经和CentralCache的该Spanlist脱离了---释放锁
+                _spanLists[index].GetMutex().unlock();
                 PageCache::GetInstance()->RecycleFreeSpanFromCC(pspan);
+                //归还后重新加锁
+                _spanLists[index].GetMutex().lock();
             }
             begin=next;
         }

@@ -28,6 +28,7 @@ namespace Xten
         ~PageCache()=default;
         //NewSpan的无锁版本---防止递归调用产生死锁问题
         Span* newSpanLockfree(size_t pageNum);
+        void recycleFreeSpanFromCCLockFree(Span* span);
     private:
         //PageCache的hash结构,是通过Span管理的页数[1-128]进行区分SpanLists
         SpanList _spanLists[PAGE_NUM];

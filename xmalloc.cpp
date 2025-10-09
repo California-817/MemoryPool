@@ -11,8 +11,11 @@ namespace Xten
         return tc->Allocate(size);
     }
     // 2.释放空间函数
-    void xfree(void *ptr)
+    void xfree(void *ptr,size_t sz)
     {
         //todo
+        ThreadCache* tc=ThreadCache::GetThreadCache();
+        assert(tc);
+        return tc->Deallocate(ptr,sz);
     }
 } // namespace Xten

@@ -9,12 +9,15 @@ namespace Xten
         Span *newspan = nullptr;
         _mtx.lock();
         newspan = newSpanLockfree(pageNum);
+        newspan->isUsed = true;
         _mtx.unlock();
         return newspan;
     }
     // 获取指定内存块所属的Span指针
     Span *PageCache::MemoryPtr2Span(void *ptr)
     {
+        // lock todo
+        std::unique_lock<std::mutex> lock(_mtx);
         PageID pgid = ((PageID)ptr >> PAGE_SHIFT);
         auto iter = _PageId2Span.find(pgid);
         if (iter == _PageId2Span.end())
@@ -52,6 +55,12 @@ namespace Xten
             mspan->pageCount = i - pageNum;
             // 将另一个放入i-pageNum页数链表中
             _spanLists[i - pageNum].PushFront(mspan);
+
+            // 1.建立仍保存在pc中的Span及其边缘两页的映射关系---方便后续合并
+            _PageId2Span[mspan->pageId] = mspan;
+            _PageId2Span[mspan->pageId + mspan->pageCount - 1] = mspan;
+
+            // 2.建立分配给cc的Span及其页映射关系---包含了左右边界的映射关系
             for (PageID i = 0; i < nspan->pageCount; i++)
             {
                 _PageId2Span[nspan->pageId + i] = nspan;
@@ -70,7 +79,61 @@ namespace Xten
     // 从CentralCache中回收空闲Span并合并成更大页空间的Span
     void PageCache::RecycleFreeSpanFromCC(Span *span)
     {
-        //todo
+        _mtx.lock();
+        span->isUsed = false;
+        recycleFreeSpanFromCCLockFree(span);
+        _mtx.unlock();
+    }
+    // 无锁
+    void PageCache::recycleFreeSpanFromCCLockFree(Span *span)
+    {
+        // 进行合并Span
+        // 1.exists 2.no using 3.num<128页
+        // 1.left
+        _spanLists[span->pageCount].Erase(span);
+        while (true)
+        {
+            auto iter = _PageId2Span.find(span->pageId - 1);
+            if (iter == _PageId2Span.end())
+                // not exists
+                break;
+            // find
+            Span *leftspan = iter->second;
+            if (leftspan->isUsed)
+                // using
+                break;
+            if (leftspan->pageCount + span->pageCount >= PAGE_NUM)
+                break;
+            // 可以合并
+            span->pageId = leftspan->pageId;
+            span->pageCount += leftspan->pageCount;
+            // 从spanlist中删除被合并的span
+            _spanLists[leftspan->pageCount].Erase(leftspan);
+            delete leftspan;
+        }
+        // 2.right
+        while (true)
+        {
+            auto iter = _PageId2Span.find(span->pageId + span->pageCount);
+            if (iter == _PageId2Span.end())
+                // not exists
+                break;
+            // find
+            Span *rightspan = iter->second;
+            if (rightspan->isUsed)
+                // using
+                break;
+            if (rightspan->pageCount + span->pageCount >= PAGE_NUM)
+                break;
+            // 可以合并
+            span->pageCount += rightspan->pageCount;
+            _spanLists[rightspan->pageCount].Erase(rightspan);
+            delete rightspan;
+        }
+        // 将合并后的span插入指定的spanlist
+        _spanLists[span->pageCount].PushFront(span);
+        _PageId2Span[span->pageId]=span;
+        _PageId2Span[span->pageId+span->pageCount-1]=span;
     }
     PageCache PageCache::_instance;
 } // namespace Xten

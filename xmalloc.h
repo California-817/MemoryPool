@@ -6,7 +6,7 @@ namespace Xten
     //1.开空间函数
     void* xmalloc(size_t size);
     //2.释放空间函数
-    void xfree(void* ptr);
+    void xfree(void* ptr,size_t sz);
 } // namespace Xten
 
 #endif

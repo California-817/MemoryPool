@@ -20,6 +20,8 @@ namespace Xten
         size_t usedCount = 0; // 给ThreadCache使用空间块数
 
         void *list = nullptr; // 可用空间的链表起始地址
+
+        bool isUsed=false; //表示这个Span是否被使用
     };
     // span组织起来的双向带头循环链表
     class SpanList
