@@ -29,8 +29,20 @@ namespace Xten
     }
     Span *PageCache::newSpanLockfree(size_t pageNum)
     {
-        assert(pageNum > 0 && pageNum < PAGE_NUM);
-        // 1.对应的SpanList中有Span
+        assert(pageNum > 0);
+        if (pageNum >= PAGE_NUM)
+        {
+            // 大于128页---直接向os申请
+            void *ptr = MemoryPoolUtil::SystemCallMemory( pageNum << PAGE_SHIFT);
+            assert(ptr);
+            Span *bigSpan = new Span();
+            bigSpan->pageId = ((size_t)ptr >> PAGE_SHIFT);
+            bigSpan->pageCount = pageNum;
+            _PageId2Span[bigSpan->pageId]=bigSpan;//建立映射关系----> 一个起始页id即可
+            return bigSpan;
+        }
+        // 小于等于128页
+        //  1.对应的SpanList中有Span
         if (!_spanLists[pageNum].IsEmpty())
         {
             Span *ret = _spanLists[pageNum].GetFrontSpan();
@@ -90,7 +102,17 @@ namespace Xten
         // 进行合并Span
         // 1.exists 2.no using 3.num<128页
         // 1.left
-        _spanLists[span->pageCount].Erase(span);
+        // _spanLists[span->pageCount].Erase(span); 一定不在pc的list中 并且已经从cc的list中删除
+        if(span->pageCount>=PAGE_NUM)
+        {
+            //直接向os释放空间
+            void* ptr=(void*)(span->pageId<<PAGE_SHIFT);
+            size_t sz= span->pageCount<<PAGE_SHIFT;
+            MemoryPoolUtil::SystemCallFree(ptr,sz);
+            _PageId2Span.erase(span->pageId);
+            delete span; 
+            return;
+        }
         while (true)
         {
             auto iter = _PageId2Span.find(span->pageId - 1);
@@ -132,8 +154,8 @@ namespace Xten
         }
         // 将合并后的span插入指定的spanlist
         _spanLists[span->pageCount].PushFront(span);
-        _PageId2Span[span->pageId]=span;
-        _PageId2Span[span->pageId+span->pageCount-1]=span;
+        _PageId2Span[span->pageId] = span;
+        _PageId2Span[span->pageId + span->pageCount - 1] = span;
     }
     PageCache PageCache::_instance;
 } // namespace Xten

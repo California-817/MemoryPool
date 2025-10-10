@@ -2,6 +2,7 @@
 #include "MPutil.hpp"
 #include <iostream>
 #include "CentralCache.h"
+#include"PageCache.h"
 namespace Xten
 {
     // 线程局部存储保证每个线程都有一个threadCache
@@ -32,16 +33,16 @@ namespace Xten
     // 头删一定范围内存块,n表示删除内存块个数
     void FreeList::PopRange(void *&begin, void *&end, size_t n)
     {
-        assert(n > 0 && _curSize > n);
-        begin=_freeList;
-        end=_freeList;
-        for(int i=0;i<n-1;i++)
+        assert(n > 0 && _curSize >= n);
+        begin = _freeList;
+        end = _freeList;
+        for (int i = 0; i < n - 1; i++)
         {
-            end=(void*)(*((void**)end));
+            end = (void *)(*((void **)end));
         }
-        _freeList=(void*)(*(void**)end);
-        *((void**)end)=nullptr;
-        _curSize-=n;
+        _freeList = (void *)(*(void **)end);
+        *((void **)end) = nullptr;
+        _curSize -= n;
     }
     // 头删内存块
     void *FreeList::Pop()
@@ -67,37 +68,56 @@ namespace Xten
     // 获取空间--任意Size
     void *ThreadCache::Allocate(size_t size)
     {
-        assert(0 < size && size <= MAX_ALLOC_SIZE);
-        // 1.大小对齐 例如 20B--->24B   产生内部碎片
-        size_t alignSize = MemoryPoolUtil::RoundUp(size);
-        // 2.查找大小对应的hash表下标对应的FreeList
-        size_t index = MemoryPoolUtil::FindIndex(size);
-        // 3.直接去这个index对应的FreeList获取内存即可
-        if (!_freeLists[index].IsEmpty())
+        assert(0 < size);
+        if (size > MAX_ALLOC_SIZE) //64页
         {
-            return _freeLists[index].Pop();
+            //直接向pc获取
+            size_t alignSize=MemoryPoolUtil::RoundUp(size);
+            // 64-128-1000.. 页数
+            Span* span=PageCache::GetInstance()->NewSpan(alignSize>>PAGE_SHIFT);
+            assert(span);
+            return (void*)(span->pageId<<PAGE_SHIFT);
         }
-        // FreeList没有内存块----去centralCache获取
-        return fetchFromCentralCache(index, alignSize);
+        else
+        {
+            // 1.大小对齐 例如 20B--->24B   产生内部碎片
+            size_t alignSize = MemoryPoolUtil::RoundUp(size);
+            // 2.查找大小对应的hash表下标对应的FreeList
+            size_t index = MemoryPoolUtil::FindIndex(size);
+            // 3.直接去这个index对应的FreeList获取内存即可
+            if (!_freeLists[index].IsEmpty())
+            {
+                return _freeLists[index].Pop();
+            }
+            // FreeList没有内存块----去centralCache获取
+            return fetchFromCentralCache(index, alignSize);
+        }
+        return nullptr;
     }
     // 释放空间
     void ThreadCache::Deallocate(void *ptr, size_t size)
     {
-        assert(ptr && 0 < size && size <= MAX_ALLOC_SIZE);
+        assert(ptr && 0 < size);
+        if(size>MAX_ALLOC_SIZE)
+        {
+            Span* span=PageCache::GetInstance()->MemoryPtr2Span(ptr);
+            PageCache::GetInstance()->RecycleFreeSpanFromCC(span);
+            return;
+        }
         size_t index = MemoryPoolUtil::FindIndex(size);
         _freeLists[index].Push(ptr);
 
         size_t maxSize = _freeLists[index].GetMaxSize();
         // 将空间还给tc后，其实还需要将tc中的空闲空间还给cc
-        // 1.判断当前的内存块数量是否大于MaxSize------大于则归还MaxSize个内存块给cc
-        if (_freeLists[index].GetCurSize() > maxSize)
+        // 1.判断当前的内存块数量是否大于等于MaxSize------大于等于则归还MaxSize个内存块给cc
+        if (_freeLists[index].GetCurSize() >= maxSize)
         {
             // pop
             void *begin = nullptr;
             void *end = nullptr;
             _freeLists[index].PopRange(begin, end, maxSize);
             // 还给cc----归还的这些内存块一定在同一个SpanList中,但是不一定会在同一个Span中
-            CentralCache::GetInstance()->RecycleRangeMemoryFromTC(begin,size);
+            CentralCache::GetInstance()->RecycleRangeMemoryFromTC(begin, size);
         }
     }
     // 从CentralCache获取空间

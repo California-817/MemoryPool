@@ -46,7 +46,7 @@ namespace Xten
             pspan->usedCount--;
             if(pspan->usedCount==0)
             {
-                //从CC的Spanlist中删除
+                //从CC的Spanlist中删除----一个span只能在cc或者pc的spanlist中 不能同时存在
                 _spanLists[index].Erase(pspan);
                 pspan->list=nullptr;
                 pspan->next=nullptr;

@@ -36,11 +36,13 @@ namespace Xten
             {
                 return XX(size, 8 * 1024);
             }
-#undef XX
             else
             {
-                assert(false);
+                // 大于256kb直接按照4kb大小对齐
+                return XX(size, (1 << PAGE_SHIFT));
             }
+#undef XX
+
             return -1;
         }
         // 根据大小查找hash下标
@@ -106,6 +108,16 @@ namespace Xten
                 return nullptr;
 #endif
             return ptr;
+        }
+        //调用munmap向os释放空间
+        static void SystemCallFree(void *ptr, size_t size)
+        {
+#ifdef __linux__
+            if (munmap(ptr, size) == -1)
+            {
+                assert(false);
+            }
+#endif
         }
     };
 }
