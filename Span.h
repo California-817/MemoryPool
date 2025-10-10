@@ -22,6 +22,8 @@ namespace Xten
         void *list = nullptr; // 可用空间的链表起始地址
 
         bool isUsed=false; //表示这个Span是否被使用
+
+        size_t objSize=0; //这个span管理的空间被划分的大小
     };
     // span组织起来的双向带头循环链表
     class SpanList

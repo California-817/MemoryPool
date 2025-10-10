@@ -87,6 +87,7 @@ namespace Xten
         char *begin = (char *)(newSpan->pageId << PAGE_SHIFT);
         char *tail = (char *)(begin + (newSpan->pageCount << PAGE_SHIFT));
         newSpan->list = (void *)begin;
+        newSpan->objSize=size; //记录该span划分空间大小
         char *next = begin + size;
         while (next < tail)
         {

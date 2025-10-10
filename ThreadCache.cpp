@@ -76,6 +76,7 @@ namespace Xten
             // 64-128-1000.. 页数
             Span* span=PageCache::GetInstance()->NewSpan(alignSize>>PAGE_SHIFT);
             assert(span);
+            span->objSize=alignSize;
             return (void*)(span->pageId<<PAGE_SHIFT);
         }
         else
@@ -97,6 +98,11 @@ namespace Xten
     // 释放空间
     void ThreadCache::Deallocate(void *ptr, size_t size)
     {
+        //外部传入的size是无效的---在该函数通过ptr进行计算
+        Span* tmp=PageCache::GetInstance()->MemoryPtr2Span(ptr);
+        assert(tmp);
+        size=tmp->objSize;
+
         assert(ptr && 0 < size);
         if(size>MAX_ALLOC_SIZE)
         {
